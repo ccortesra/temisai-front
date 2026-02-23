@@ -4,16 +4,11 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LogOut, FileText, MessageSquare, Plus, Menu, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { LogOut, FileText, MessageSquare, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api/client";
 import { useQuery } from "@tanstack/react-query";
-
-interface Thread {
-    id: string;
-    title: string | null;
-}
+import { ThreadResponse } from "@/lib/types/api";
 
 export default function DashboardLayout({
     children,
@@ -34,7 +29,7 @@ export default function DashboardLayout({
     const { data: threads } = useQuery({
         queryKey: ["threads"],
         queryFn: async () => {
-            const res = await apiClient.get<Thread[]>("/threads");
+            const res = await apiClient.get<ThreadResponse[]>("/threads");
             return res.data;
         },
         enabled: isAuthenticated,
@@ -75,13 +70,10 @@ export default function DashboardLayout({
                         </Link>
 
                         <div className="pt-4 pb-2">
-                            <div className="flex items-center justify-between px-2 mb-2">
+                            <div className="flex items-center px-2 mb-2">
                                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                                     Threads
                                 </p>
-                                <Link href="/threads/new" onClick={(e) => { e.preventDefault(); /* implement new thread */ }}>
-                                    <Plus className="h-4 w-4 hover:text-white cursor-pointer" />
-                                </Link>
                             </div>
 
                             <div className="space-y-1">
@@ -103,16 +95,6 @@ export default function DashboardLayout({
                                     <p className="px-2 text-sm text-slate-500 italic">No threads yet</p>
                                 )}
                             </div>
-                        </div>
-
-                        <div className="pt-2">
-                            <Link href="/rag-chat" className={cn(
-                                "flex items-center px-2 py-2 text-sm font-medium rounded-md",
-                                pathname === "/rag-chat" ? "bg-slate-800 text-white" : "hover:bg-slate-800 hover:text-white"
-                            )}>
-                                <MessageSquare className="mr-3 flex-shrink-0 h-5 w-5 text-indigo-400" />
-                                Stateless RAG
-                            </Link>
                         </div>
                     </nav>
                 </div>

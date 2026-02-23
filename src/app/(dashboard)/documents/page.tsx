@@ -3,17 +3,20 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
-import { DocumentAPIReturn } from "@/lib/types/api";
-import { UploadCloud, Trash2, File as FileIcon, Loader2, AlertCircle } from "lucide-react";
+import { DocumentAPIReturn, ThreadResponse } from "@/lib/types/api";
+import { UploadCloud, Trash2, File as FileIcon, Loader2, AlertCircle, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
+import { useRouter } from "next/navigation";
 
 export default function DocumentsPage() {
     const queryClient = useQueryClient();
+    const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [creatingThreadForDoc, setCreatingThreadForDoc] = useState<string | null>(null);
 
     // Fetch Documents
     const { data: documents, isLoading, isError } = useQuery({
@@ -21,6 +24,24 @@ export default function DocumentsPage() {
         queryFn: async () => {
             const res = await apiClient.get<DocumentAPIReturn[]>("/documents");
             return res.data;
+        },
+    });
+
+    const createThreadMutation = useMutation({
+        mutationFn: async (doc: DocumentAPIReturn) => {
+            const res = await apiClient.post<ThreadResponse>("/threads", {
+                title: doc.filename,
+                doc_id: doc.id,
+            });
+            return res.data;
+        },
+        onSuccess: (thread) => {
+            queryClient.invalidateQueries({ queryKey: ["threads"] });
+            router.push(`/threads/${thread.id}`);
+        },
+        onError: (err: any) => {
+            alert(err.response?.data?.detail?.[0]?.msg || "Failed to create thread");
+            setCreatingThreadForDoc(null);
         },
     });
 
@@ -158,9 +179,22 @@ export default function DocumentsPage() {
                                         </div>
                                     </div>
                                     <div className="ml-4 flex-shrink-0 flex items-center space-x-2">
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">
-                                            ID: {doc.id.substring(0, 8)}...
-                                        </span>
+                                        <button
+                                            onClick={() => {
+                                                setCreatingThreadForDoc(doc.id);
+                                                createThreadMutation.mutate(doc);
+                                            }}
+                                            disabled={creatingThreadForDoc === doc.id}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md transition-colors"
+                                            title="Start a new thread for this document"
+                                        >
+                                            {creatingThreadForDoc === doc.id ? (
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                                <MessageSquarePlus className="h-3.5 w-3.5" />
+                                            )}
+                                            New Thread
+                                        </button>
                                         <button
                                             onClick={() => {
                                                 if (confirm("Are you sure you want to delete this document? This cannot be undone.")) {

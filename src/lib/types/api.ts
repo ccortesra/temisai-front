@@ -42,7 +42,6 @@ export interface MessageResponse {
 
 export interface ThreadChatRequest {
     query: string;
-    doc_id?: string | null;
 }
 
 export interface ThreadChatResponse {
@@ -54,11 +53,13 @@ export interface ThreadChatResponse {
 
 export interface ThreadCreate {
     title?: string | null;
+    doc_id: string;
 }
 
 export interface ThreadResponse {
     id: string;
     user_id: string;
+    doc_id: string;
     title?: string | null;
     created_at?: string | null;
     updated_at?: string | null;
@@ -68,10 +69,6 @@ export interface ThreadUpdate {
     title: string;
 }
 
-export interface ChatRequest {
-    query: string;
-    doc_id?: string | null;
-}
 
 export interface HTTPValidationError {
     detail: ValidationError[];

@@ -3,18 +3,20 @@
 import { useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ThreadResponse } from "@/lib/types/api";
 import { Loader2 } from "lucide-react";
 
 export default function NewThreadPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
+    const searchParams = useSearchParams();
+    const docId = searchParams.get("docId");
 
     const createThread = useMutation({
-        mutationFn: async () => {
+        mutationFn: async (docId: string) => {
             const res = await apiClient.post<ThreadResponse>("/threads", {
-                title: "New Legal Thread" // Default title
+                doc_id: docId,
             });
             return res.data;
         },
@@ -26,11 +28,15 @@ export default function NewThreadPage() {
             console.error("Failed to create thread", err);
             alert(err.response?.data?.detail?.[0]?.msg || "Failed to create thread");
             router.push("/documents");
-        }
+        },
     });
 
     useEffect(() => {
-        createThread.mutate();
+        if (!docId) {
+            router.replace("/documents");
+            return;
+        }
+        createThread.mutate(docId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
