@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { apiClient } from "@/lib/api/client";
 import { DocumentChunk } from "@/lib/types/api";
-import { ChevronLeft, ChevronRight, Loader2, AlertCircle, ZoomIn, ZoomOut } from "lucide-react";
+import { Loader2, AlertCircle, ZoomIn, ZoomOut, Search } from "lucide-react";
 
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -19,24 +19,52 @@ interface PdfViewerProps {
     chunks?: DocumentChunk[];
 }
 
-interface PageDimensions {
-    width: number;
-    height: number;
+// bbox values are normalized 0–1, origin top-left — convert directly to percentages.
+function chunkHighlightStyle(chunk: DocumentChunk): React.CSSProperties | null {
+    const w = (chunk.bbox_right - chunk.bbox_left) * 100;
+    const h = (chunk.bbox_bottom - chunk.bbox_top) * 100;
+    if (w <= 0 || h <= 0) return null;
+    return {
+        position: "absolute",
+        left: `${chunk.bbox_left * 100}%`,
+        top: `${chunk.bbox_top * 100}%`,
+        width: `${w}%`,
+        height: `${h}%`,
+        backgroundColor: "rgba(250, 204, 21, 0.35)",
+        border: "2px solid rgba(202, 138, 4, 0.8)",
+        borderRadius: "2px",
+        pointerEvents: "none",
+        zIndex: 10,
+    };
 }
 
 export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [pdfError, setPdfError] = useState<string | null>(null);
     const [numPages, setNumPages] = useState<number>(0);
-    const [currentPage, setCurrentPage] = useState<number>(1);
-    const [scale, setScale] = useState<number>(1.0);
-    const [pageDimensions, setPageDimensions] = useState<PageDimensions | null>(null);
+    const [zoomFactor, setZoomFactor] = useState<number>(1.0);
+    const [containerWidth, setContainerWidth] = useState<number>(0);
+
     const containerRef = useRef<HTMLDivElement>(null);
+    // Maps 0-indexed API page number → the wrapper div element
+    const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
     const objectUrlRef = useRef<string | null>(null);
 
+    // Keep container width in sync so pages always fill the panel.
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver((entries) => {
+            setContainerWidth(entries[0]?.contentRect.width ?? 0);
+        });
+        ro.observe(el);
+        setContainerWidth(el.clientWidth);
+        return () => ro.disconnect();
+    }, []);
+
+    // Fetch the PDF via authenticated request, build a blob URL.
     useEffect(() => {
         let cancelled = false;
-
         const fetchPdf = async () => {
             try {
                 setPdfError(null);
@@ -53,9 +81,7 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                 if (!cancelled) setPdfError("Failed to load PDF.");
             }
         };
-
         fetchPdf();
-
         return () => {
             cancelled = true;
             if (objectUrlRef.current) {
@@ -65,112 +91,84 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
         };
     }, [docId]);
 
-    // Auto-navigate to the first page that has a highlighted chunk whenever chunks change
+    // Scroll to the first page that has a highlight whenever chunks change.
     useEffect(() => {
-        if (chunks.length > 0) {
-            const firstPage = Math.min(...chunks.map((c) => c.page));
-            setCurrentPage(firstPage);
-        }
+        if (chunks.length === 0) return;
+        const firstApiPage = Math.min(...chunks.map((c) => c.page));
+        // Small delay so the page has time to render before we scroll.
+        const t = setTimeout(() => {
+            pageRefs.current.get(firstApiPage)?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+            });
+        }, 100);
+        return () => clearTimeout(t);
     }, [chunks]);
 
     const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
         setNumPages(numPages);
     }, []);
 
-    const onPageLoadSuccess = useCallback((page: any) => {
-        const viewport = page.getViewport({ scale: 1 });
-        setPageDimensions({ width: viewport.width, height: viewport.height });
-    }, []);
-
-    const chunksOnPage = chunks.filter((c) => c.page === currentPage);
-
-    const renderHighlights = () => {
-        if (!pageDimensions || chunksOnPage.length === 0) return null;
-        const { width: pdfW, height: pdfH } = pageDimensions;
-
-        return chunksOnPage.map((chunk) => {
-            const left = (chunk.bbox_left / pdfW) * 100;
-            const top = (chunk.bbox_top / pdfH) * 100;
-            const width = ((chunk.bbox_right - chunk.bbox_left) / pdfW) * 100;
-            const height = ((chunk.bbox_bottom - chunk.bbox_top) / pdfH) * 100;
-
-            return (
-                <div
-                    key={chunk.id}
-                    className="absolute pointer-events-none rounded-sm"
-                    style={{
-                        left: `${left}%`,
-                        top: `${top}%`,
-                        width: `${width}%`,
-                        height: `${height}%`,
-                        backgroundColor: "rgba(250, 204, 21, 0.35)",
-                        border: "1.5px solid rgba(202, 138, 4, 0.6)",
-                    }}
-                />
-            );
-        });
-    };
+    // Fill the panel width minus padding, then apply zoom multiplier.
+    const pageWidth = containerWidth > 0 ? (containerWidth - 32) * zoomFactor : undefined;
 
     return (
         <div className="flex flex-col h-full bg-slate-100 border-r border-slate-200">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-slate-800 text-slate-200 shrink-0">
-                <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4 px-4 py-2 bg-slate-800 text-slate-200 shrink-0">
+                {/* Zoom controls */}
+                <div className="flex items-center gap-1.5">
                     <button
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage <= 1}
-                        className="p-1 rounded hover:bg-slate-700 disabled:opacity-30 transition-colors"
-                        aria-label="Previous page"
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="text-sm tabular-nums">
-                        {currentPage} / {numPages || "—"}
-                    </span>
-                    <button
-                        onClick={() => setCurrentPage((p) => Math.min(numPages, p + 1))}
-                        disabled={currentPage >= numPages}
-                        className="p-1 rounded hover:bg-slate-700 disabled:opacity-30 transition-colors"
-                        aria-label="Next page"
-                    >
-                        <ChevronRight className="h-4 w-4" />
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setScale((s) => Math.max(0.5, +(s - 0.25).toFixed(2)))}
-                        className="p-1 rounded hover:bg-slate-700 transition-colors"
+                        onClick={() => setZoomFactor((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+                        className="p-1 rounded hover:bg-slate-700 transition-colors disabled:opacity-30"
+                        disabled={zoomFactor <= 0.5}
                         aria-label="Zoom out"
                     >
                         <ZoomOut className="h-4 w-4" />
                     </button>
-                    <span className="text-xs w-12 text-center">{Math.round(scale * 100)}%</span>
+                    <span className="text-xs w-10 text-center tabular-nums">
+                        {Math.round(zoomFactor * 100)}%
+                    </span>
                     <button
-                        onClick={() => setScale((s) => Math.min(3, +(s + 0.25).toFixed(2)))}
-                        className="p-1 rounded hover:bg-slate-700 transition-colors"
+                        onClick={() => setZoomFactor((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
+                        className="p-1 rounded hover:bg-slate-700 transition-colors disabled:opacity-30"
+                        disabled={zoomFactor >= 3}
                         aria-label="Zoom in"
                     >
                         <ZoomIn className="h-4 w-4" />
                     </button>
                 </div>
 
-                {chunksOnPage.length > 0 && (
+                {/* Page count */}
+                {numPages > 0 && (
+                    <span className="text-xs text-slate-400 tabular-nums">
+                        {numPages} pages
+                    </span>
+                )}
+
+                {/* Search hint */}
+                <span className="flex items-center gap-1 text-xs text-slate-500 ml-auto">
+                    <Search className="h-3 w-3" />
+                    Ctrl+F to search
+                </span>
+
+                {/* Highlight count */}
+                {chunks.length > 0 && (
                     <span className="text-xs text-yellow-300 font-medium">
-                        {chunksOnPage.length} highlight{chunksOnPage.length > 1 ? "s" : ""} on this page
+                        {chunks.length} chunk{chunks.length > 1 ? "s" : ""} highlighted
                     </span>
                 )}
             </div>
 
-            {/* PDF area */}
-            <div ref={containerRef} className="flex-1 overflow-auto flex justify-center p-4">
+            {/* Scrollable PDF area — all pages stacked */}
+            <div ref={containerRef} className="flex-1 overflow-y-auto overflow-x-auto bg-slate-200">
                 {pdfError ? (
-                    <div className="flex flex-col items-center justify-center text-slate-500 gap-2 mt-20">
+                    <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2 p-8">
                         <AlertCircle className="h-8 w-8 text-red-400" />
                         <p className="text-sm">{pdfError}</p>
                     </div>
                 ) : !pdfUrl ? (
-                    <div className="flex flex-col items-center justify-center text-slate-400 gap-2 mt-20">
+                    <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2 p-8">
                         <Loader2 className="h-8 w-8 animate-spin" />
                         <p className="text-sm">Loading document…</p>
                     </div>
@@ -179,25 +177,41 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                         file={pdfUrl}
                         onLoadSuccess={onDocumentLoadSuccess}
                         loading={
-                            <div className="flex items-center gap-2 text-slate-400 mt-20">
+                            <div className="flex items-center justify-center gap-2 text-slate-400 p-8">
                                 <Loader2 className="h-6 w-6 animate-spin" />
                                 <span className="text-sm">Rendering…</span>
                             </div>
                         }
                     >
-                        <div className="relative inline-block shadow-lg">
-                            <Page
-                                pageNumber={currentPage}
-                                scale={scale}
-                                onLoadSuccess={onPageLoadSuccess}
-                                renderTextLayer={true}
-                                renderAnnotationLayer={false}
-                            />
-                            {/* Highlight overlay — sits on top of the rendered page */}
-                            <div className="absolute inset-0 pointer-events-none">
-                                {renderHighlights()}
-                            </div>
-                        </div>
+                        {/* Render every page so the user can scroll freely and Ctrl+F works */}
+                        {Array.from({ length: numPages }, (_, pageIndex) => {
+                            const pageChunks = chunks.filter((c) => c.page === pageIndex);
+                            return (
+                                <div
+                                    key={pageIndex}
+                                    ref={(el) => {
+                                        if (el) pageRefs.current.set(pageIndex, el);
+                                        else pageRefs.current.delete(pageIndex);
+                                    }}
+                                    className="flex justify-center py-2 first:pt-4 last:pb-4"
+                                >
+                                    <Page
+                                        pageNumber={pageIndex + 1}
+                                        width={pageWidth}
+                                        renderTextLayer={true}
+                                        renderAnnotationLayer={false}
+                                        className="shadow-md"
+                                    >
+                                        {pageChunks.map((chunk) => {
+                                            const style = chunkHighlightStyle(chunk);
+                                            return style ? (
+                                                <div key={chunk.id} style={style} />
+                                            ) : null;
+                                        })}
+                                    </Page>
+                                </div>
+                            );
+                        })}
                     </Document>
                 )}
             </div>

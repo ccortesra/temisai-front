@@ -8,8 +8,8 @@ import {
     MessageResponse,
     ThreadResponse,
     ThreadChatResponse,
+    AgentDocumentReport,
     DocumentChunk,
-    ConstitutionChunk,
 } from "@/lib/types/api";
 import {
     Send,
@@ -20,71 +20,138 @@ import {
     Edit2,
     Check,
     X,
-    ChevronDown,
+    ChevronLeft,
     ChevronRight,
     FileText,
-    Scale,
+    BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false });
 
-// ─── Expandable chunk list ────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function ChunkList({
-    title,
+/** Strip HTML anchor tags injected by the backend into chunk content. */
+function cleanContent(raw: string): string {
+    return raw.replace(/<[^>]*>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Render a string that may contain **bold** markdown. */
+function MarkdownText({ text }: { text: string }) {
+    const lines = text.split("\n");
+    return (
+        <>
+            {lines.map((line, li) => {
+                const parts = line.split(/\*\*(.*?)\*\*/g);
+                return (
+                    <span key={li}>
+                        {parts.map((part, i) =>
+                            i % 2 === 1 ? (
+                                <strong key={i} className="font-semibold text-slate-900">
+                                    {part}
+                                </strong>
+                            ) : (
+                                part
+                            )
+                        )}
+                        {li < lines.length - 1 && <br />}
+                    </span>
+                );
+            })}
+        </>
+    );
+}
+
+// ─── Chunk navigator card ─────────────────────────────────────────────────────
+
+function ChunkNavigatorCard({
     chunks,
-    icon: Icon,
-    defaultOpen = false,
+    onChunkSelect,
 }: {
-    title: string;
-    chunks: (DocumentChunk | ConstitutionChunk)[];
-    icon: React.ElementType;
-    defaultOpen?: boolean;
+    chunks: DocumentChunk[];
+    onChunkSelect: (chunk: DocumentChunk) => void;
 }) {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-    if (!chunks || chunks.length === 0) return null;
+    const [index, setIndex] = useState(0);
+    if (chunks.length === 0) return null;
+
+    const current = chunks[index];
+
+    const goTo = (next: number) => {
+        setIndex(next);
+        onChunkSelect(chunks[next]);
+    };
 
     return (
-        <div className="mt-3 border border-slate-200 rounded-md bg-white overflow-hidden text-sm">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 transition-colors text-slate-700 font-medium"
-            >
-                <span className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-slate-500" />
-                    {title} ({chunks.length})
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 text-xs overflow-hidden">
+            {/* Header row */}
+            <div className="flex items-center justify-between px-3 py-2 bg-amber-100/70 border-b border-amber-200">
+                <span className="flex items-center gap-1.5 font-semibold text-amber-800">
+                    <FileText className="h-3.5 w-3.5" />
+                    Sources
                 </span>
-                {isOpen ? (
-                    <ChevronDown className="h-4 w-4" />
-                ) : (
-                    <ChevronRight className="h-4 w-4" />
-                )}
-            </button>
-
-            {isOpen && (
-                <div className="border-t border-slate-200 max-h-52 overflow-y-auto">
-                    <ul className="divide-y divide-slate-100">
-                        {chunks.map((chunk, idx) => (
-                            <li key={chunk.id || idx} className="p-3">
-                                {"page" in chunk ? (
-                                    <div className="text-xs font-semibold text-slate-500 mb-1">
-                                        Page {chunk.page}
-                                    </div>
-                                ) : (
-                                    <div className="text-xs font-semibold text-slate-500 mb-1">
-                                        {(chunk as ConstitutionChunk).breadcrumb}
-                                    </div>
-                                )}
-                                <p className="text-slate-600 whitespace-pre-wrap text-xs">
-                                    {chunk.content}
-                                </p>
-                            </li>
-                        ))}
-                    </ul>
+                <div className="flex items-center gap-0.5 text-amber-700">
+                    <button
+                        onClick={() => goTo(index - 1)}
+                        disabled={index === 0}
+                        className="p-1 rounded hover:bg-amber-200 disabled:opacity-30 transition-colors"
+                        aria-label="Previous chunk"
+                    >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="tabular-nums font-medium w-10 text-center">
+                        {index + 1} / {chunks.length}
+                    </span>
+                    <button
+                        onClick={() => goTo(index + 1)}
+                        disabled={index === chunks.length - 1}
+                        className="p-1 rounded hover:bg-amber-200 disabled:opacity-30 transition-colors"
+                        aria-label="Next chunk"
+                    >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
                 </div>
+            </div>
+
+            {/* Chunk text preview */}
+            <div className="px-3 py-2.5">
+                <p className="text-slate-700 leading-relaxed line-clamp-4">
+                    {cleanContent(current.content)}
+                </p>
+            </div>
+
+            {/* Page indicator */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-amber-200/60 text-amber-700">
+                <BookOpen className="h-3 w-3" />
+                <span>Page {current.page + 1}</span>
+            </div>
+        </div>
+    );
+}
+
+// ─── Assistant message ────────────────────────────────────────────────────────
+
+function AssistantMessage({
+    content,
+    agentReport,
+    onChunkSelect,
+}: {
+    content: string;
+    agentReport?: AgentDocumentReport;
+    onChunkSelect: (chunk: DocumentChunk) => void;
+}) {
+    // If we have the full report from the current session, use its answer.
+    // Otherwise fall back to the stored text content (historical messages).
+    const answerText = agentReport?.answer ?? content;
+    const chunks = agentReport?.most_relevant_chunks ?? [];
+
+    return (
+        <div>
+            <p className="text-sm text-slate-800 leading-relaxed">
+                <MarkdownText text={answerText} />
+            </p>
+            {chunks.length > 0 && (
+                <ChunkNavigatorCard chunks={chunks} onChunkSelect={onChunkSelect} />
             )}
         </div>
     );
@@ -102,9 +169,15 @@ export default function ThreadChatPage() {
     const [inputQuery, setInputQuery] = useState("");
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editTitleValue, setEditTitleValue] = useState("");
+
+    // The single chunk currently highlighted in the PDF viewer.
     const [activeChunks, setActiveChunks] = useState<DocumentChunk[]>([]);
 
-    // Local list of messages built from the initial fetch + optimistic mutation appends
+    // Maps assistant message id → AgentDocumentReport, populated during the session.
+    const [agentResponses, setAgentResponses] = useState<
+        Record<string, AgentDocumentReport>
+    >({});
+
     const [localMessages, setLocalMessages] = useState<MessageResponse[]>([]);
 
     // ── Queries ──────────────────────────────────────────────────────────────
@@ -160,19 +233,23 @@ export default function ThreadChatPage() {
             );
             return res.data;
         },
-        onMutate: (query) => {
+        onMutate: () => {
             setInputQuery("");
-            return { query };
         },
         onSuccess: (data) => {
-            // Append both messages directly — no refetch needed
             setLocalMessages((prev) => [
                 ...prev,
                 data.user_message,
                 data.assistant_message,
             ]);
-            // Update highlighted chunks from this response
-            setActiveChunks(data.agent_response.most_relevant_chunks);
+            // Store the full agent response keyed by the assistant message id.
+            setAgentResponses((prev) => ({
+                ...prev,
+                [data.assistant_message.id]: data.agent_response,
+            }));
+            // Show the first most-relevant chunk in the PDF viewer immediately.
+            const first = data.agent_response.most_relevant_chunks[0];
+            if (first) setActiveChunks([first]);
         },
     });
 
@@ -267,7 +344,7 @@ export default function ThreadChatPage() {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 space-y-5">
                     {messagesLoading ? (
                         <div className="flex justify-center items-center h-full">
                             <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
@@ -283,32 +360,38 @@ export default function ThreadChatPage() {
                             </p>
                         </div>
                     ) : (
-                        localMessages.map((msg) => (
-                            <div key={msg.id} className="w-full">
-                                {msg.role === "user" ? (
-                                    <div className="flex justify-end gap-2">
-                                        <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm max-w-[85%]">
-                                            {msg.content}
-                                        </div>
-                                        <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded bg-slate-900 text-white mt-0.5">
-                                            <User className="h-4 w-4" />
-                                        </div>
+                        localMessages.map((msg) =>
+                            msg.role === "user" ? (
+                                // ── User bubble ──────────────────────────────
+                                <div key={msg.id} className="flex justify-end gap-2">
+                                    <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm max-w-[85%]">
+                                        {msg.content}
                                     </div>
-                                ) : (
-                                    <div className="flex gap-2">
-                                        <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded border border-slate-200 bg-white text-slate-700 mt-0.5">
-                                            <Bot className="h-4 w-4" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <AssistantMessage content={msg.content} />
-                                        </div>
+                                    <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded bg-slate-900 text-white mt-0.5">
+                                        <User className="h-4 w-4" />
                                     </div>
-                                )}
-                            </div>
-                        ))
+                                </div>
+                            ) : (
+                                // ── Assistant bubble ─────────────────────────
+                                <div key={msg.id} className="flex gap-2">
+                                    <div className="flex items-start justify-center shrink-0 w-7 h-7 rounded border border-slate-200 bg-white text-slate-700 mt-0.5">
+                                        <Bot className="h-4 w-4 mt-1.5" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <AssistantMessage
+                                            content={msg.content}
+                                            agentReport={agentResponses[msg.id]}
+                                            onChunkSelect={(chunk) =>
+                                                setActiveChunks([chunk])
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                            )
+                        )
                     )}
 
-                    {/* Pending state */}
+                    {/* Typing indicator while waiting for response */}
                     {chatMutation.isPending && (
                         <>
                             <div className="flex justify-end gap-2">
@@ -370,41 +453,5 @@ export default function ThreadChatPage() {
                 </div>
             </div>
         </div>
-    );
-}
-
-// ─── Assistant message renderer ───────────────────────────────────────────────
-
-function AssistantMessage({ content }: { content: string }) {
-    try {
-        const parsed = JSON.parse(content);
-        if (parsed && typeof parsed.answer === "string") {
-            return (
-                <div>
-                    <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
-                        {parsed.answer}
-                    </p>
-                    <ChunkList
-                        title="Most Relevant Chunks"
-                        chunks={parsed.most_relevant_chunks ?? []}
-                        icon={FileText}
-                        defaultOpen={false}
-                    />
-                    <ChunkList
-                        title="Constitution References"
-                        chunks={parsed.constitution_chunks ?? []}
-                        icon={Scale}
-                    />
-                </div>
-            );
-        }
-    } catch {
-        // not JSON
-    }
-
-    return (
-        <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
-            {content}
-        </p>
     );
 }
