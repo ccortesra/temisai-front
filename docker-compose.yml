@@ -1,0 +1,17 @@
+services:
+  temis-front:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Points to the backend running on the host machine.
+        # host.docker.internal resolves to the host on Docker Desktop (Mac/Windows).
+        # On Linux with host network mode the API is reachable at localhost directly.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    # host network mode so the container shares the host's network stack —
+    # the frontend reaches the backend at localhost:8000 without extra config.
+    network_mode: host
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
