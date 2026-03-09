@@ -10,6 +10,7 @@ import {
     ThreadChatResponse,
     AgentDocumentReport,
     DocumentChunk,
+    CodeChunk,
 } from "@/lib/types/api";
 import {
     Send,
@@ -24,8 +25,11 @@ import {
     ChevronRight,
     FileText,
     BookOpen,
+    Scale,
+    ScanText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false });
@@ -35,6 +39,13 @@ const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false }
 /** Strip HTML anchor tags injected by the backend into chunk content. */
 function cleanContent(raw: string): string {
     return raw.replace(/<[^>]*>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function formatCodeName(codeName: string): string {
+    return codeName
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase())
+        .trim();
 }
 
 /** Render a string that may contain **bold** markdown. */
@@ -60,6 +71,60 @@ function MarkdownText({ text }: { text: string }) {
                 );
             })}
         </>
+    );
+}
+
+function LawChunksCard({ chunks }: { chunks: CodeChunk[] }) {
+    if (chunks.length === 0) return null;
+
+    return (
+        <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs overflow-hidden">
+            <div className="px-3 py-2 bg-indigo-100/70 border-b border-indigo-200">
+                <span className="font-semibold text-indigo-900">⚖️ Legal Code Sources</span>
+                <p className="mt-0.5 text-indigo-700">
+                    Expand an article to view the full legal chunk.
+                </p>
+            </div>
+
+            <div className="p-2 space-y-2">
+                {chunks.map((chunk) => (
+                    <details
+                        key={chunk.id}
+                        className="rounded-md border border-indigo-200 bg-white open:bg-indigo-50/40"
+                    >
+                        <summary className="cursor-pointer list-none px-3 py-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <p className="font-semibold text-indigo-900">
+                                        🧾 {chunk.articulo}
+                                    </p>
+                                    <p className="mt-0.5 text-indigo-700 truncate">
+                                        🗂️ {chunk.capitulo}
+                                    </p>
+                                </div>
+                                <span className="shrink-0 text-indigo-500 text-[11px]">
+                                    Expand
+                                </span>
+                            </div>
+                            <p className="mt-1 text-indigo-700 line-clamp-2">
+                                📘 {formatCodeName(chunk.code_name)}
+                            </p>
+                        </summary>
+
+                        <div className="px-3 pb-3 pt-1 border-t border-indigo-200">
+                            <p className="text-indigo-700">
+                                🧭 <span className="font-medium">Path:</span> {chunk.breadcrumb}
+                            </p>
+                            <div className="mt-2 rounded border border-indigo-200 bg-white p-2.5">
+                                <p className="whitespace-pre-wrap text-slate-700 leading-relaxed">
+                                    {cleanContent(chunk.content)}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+                ))}
+            </div>
+        </div>
     );
 }
 
@@ -144,6 +209,7 @@ function AssistantMessage({
     // Otherwise fall back to the stored text content (historical messages).
     const answerText = agentReport?.answer ?? content;
     const chunks = agentReport?.most_relevant_chunks ?? [];
+    const lawChunks = agentReport?.law_chunks ?? [];
 
     return (
         <div>
@@ -153,6 +219,236 @@ function AssistantMessage({
             {chunks.length > 0 && (
                 <ChunkNavigatorCard chunks={chunks} onChunkSelect={onChunkSelect} />
             )}
+            {lawChunks.length > 0 && <LawChunksCard chunks={lawChunks} />}
+        </div>
+    );
+}
+
+// ─── Chat panel (shared between both modes) ──────────────────────────────────
+
+function ChatPanel({
+    thread,
+    threadId,
+    isDocMode,
+    messagesLoading,
+    localMessages,
+    agentResponses,
+    chatMutation,
+    inputQuery,
+    setInputQuery,
+    handleSubmit,
+    handleTitleSubmit,
+    isEditingTitle,
+    setIsEditingTitle,
+    editTitleValue,
+    setEditTitleValue,
+    deleteThread,
+    setActiveChunks,
+    messagesEndRef,
+}: {
+    thread?: ThreadResponse;
+    threadId: string;
+    isDocMode: boolean;
+    messagesLoading: boolean;
+    localMessages: MessageResponse[];
+    agentResponses: Record<string, AgentDocumentReport>;
+    chatMutation: ReturnType<typeof useMutation<ThreadChatResponse, Error, string>>;
+    inputQuery: string;
+    setInputQuery: (v: string) => void;
+    handleSubmit: (e: React.FormEvent) => void;
+    handleTitleSubmit: () => void;
+    isEditingTitle: boolean;
+    setIsEditingTitle: (v: boolean) => void;
+    editTitleValue: string;
+    setEditTitleValue: (v: string) => void;
+    deleteThread: ReturnType<typeof useMutation<void, Error, void>>;
+    setActiveChunks: (chunks: DocumentChunk[]) => void;
+    messagesEndRef: React.RefObject<HTMLDivElement | null>;
+}) {
+    const ModeIcon = isDocMode ? ScanText : Scale;
+    const modeColor = isDocMode ? "text-amber-500" : "text-emerald-500";
+    const modeLabel = isDocMode ? "OCR Expert" : "ChatLegal";
+    const emptyTitle = isDocMode
+        ? "Start a document analysis"
+        : "Start a legal conversation";
+    const emptySubtitle = isDocMode
+        ? "Ask a question about this document."
+        : "Ask any question about Colombian law.";
+    const pendingLabel = isDocMode
+        ? "Analyzing document…"
+        : "Searching legal sources…";
+
+    return (
+        <div className="flex-1 flex flex-col border-l border-slate-200 bg-white min-w-0">
+            {/* Header */}
+            <div className="h-14 border-b border-slate-200 flex items-center justify-between px-4 bg-slate-50 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                    <ModeIcon className={cn("h-4 w-4 shrink-0", modeColor)} />
+                    {isEditingTitle ? (
+                        <div className="flex items-center gap-1.5">
+                            <input
+                                type="text"
+                                value={editTitleValue}
+                                onChange={(e) => setEditTitleValue(e.target.value)}
+                                onKeyDown={(e) =>
+                                    e.key === "Enter" && handleTitleSubmit()
+                                }
+                                className="px-2 py-1 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-900 w-36"
+                                autoFocus
+                            />
+                            <button
+                                onClick={handleTitleSubmit}
+                                className="text-green-600 hover:text-green-700"
+                            >
+                                <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={() => setIsEditingTitle(false)}
+                                className="text-slate-400 hover:text-slate-600"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <h2 className="text-sm font-semibold text-slate-800 truncate">
+                                {thread?.title || modeLabel}
+                            </h2>
+                            <button
+                                onClick={() => setIsEditingTitle(true)}
+                                className="shrink-0 text-slate-400 hover:text-slate-700 transition-colors"
+                            >
+                                <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                        </>
+                    )}
+                </div>
+
+                <button
+                    onClick={() => {
+                        if (confirm("Delete this thread?")) deleteThread.mutate();
+                    }}
+                    className="shrink-0 text-slate-400 hover:text-red-600 transition-colors"
+                    title="Delete Thread"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                {messagesLoading ? (
+                    <div className="flex justify-center items-center h-full">
+                        <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
+                    </div>
+                ) : localMessages.length === 0 ? (
+                    <div className="flex flex-col justify-center items-center h-full text-slate-400 px-4">
+                        <ModeIcon className={cn("h-10 w-10 mb-3 opacity-30", modeColor)} />
+                        <p className="text-sm font-medium text-slate-600 text-center">
+                            {emptyTitle}
+                        </p>
+                        <p className="text-xs mt-1 text-center text-slate-400">
+                            {emptySubtitle}
+                        </p>
+                    </div>
+                ) : (
+                    localMessages.map((msg) =>
+                        msg.role === "user" ? (
+                            <div key={msg.id} className="flex justify-end gap-2">
+                                <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm max-w-[85%]">
+                                    {msg.content}
+                                </div>
+                                <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded bg-slate-900 text-white mt-0.5">
+                                    <User className="h-4 w-4" />
+                                </div>
+                            </div>
+                        ) : (
+                            <div key={msg.id} className="flex gap-2">
+                                <div className={cn(
+                                    "flex items-start justify-center shrink-0 w-7 h-7 rounded border mt-0.5",
+                                    isDocMode
+                                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                )}>
+                                    <ModeIcon className="h-4 w-4 mt-1.5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <AssistantMessage
+                                        content={msg.content}
+                                        agentReport={agentResponses[msg.id]}
+                                        onChunkSelect={(chunk) =>
+                                            setActiveChunks([chunk])
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        )
+                    )
+                )}
+
+                {chatMutation.isPending && (
+                    <>
+                        <div className="flex justify-end gap-2">
+                            <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm max-w-[85%] opacity-70">
+                                {chatMutation.variables}
+                            </div>
+                            <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded bg-slate-900 text-white mt-0.5">
+                                <User className="h-4 w-4" />
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded border border-slate-200 bg-white text-slate-700 mt-0.5">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            </div>
+                            <div className="pt-1.5">
+                                <span className="text-xs text-slate-500 animate-pulse">
+                                    {pendingLabel}
+                                </span>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="p-3 border-t border-slate-200 shrink-0">
+                <form
+                    onSubmit={handleSubmit}
+                    className="relative flex items-end shadow-sm"
+                >
+                    <textarea
+                        value={inputQuery}
+                        onChange={(e) => setInputQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }
+                        }}
+                        placeholder={
+                            isDocMode
+                                ? "Ask about this document… (Shift+Enter for new line)"
+                                : "Ask a legal question… (Shift+Enter for new line)"
+                        }
+                        className="w-full resize-none min-h-[48px] max-h-[160px] border border-slate-300 rounded-lg py-3 pl-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                        rows={1}
+                        disabled={chatMutation.isPending}
+                    />
+                    <Button
+                        type="submit"
+                        size="icon"
+                        disabled={!inputQuery.trim() || chatMutation.isPending}
+                        className="absolute right-1.5 bottom-1.5 h-9 w-9 bg-slate-900 rounded-md shadow-sm transition-transform active:scale-95"
+                    >
+                        <Send className="h-4 w-4" />
+                    </Button>
+                </form>
+                <p className="text-center text-xs text-slate-400 mt-1.5">
+                    TemisAI can make mistakes. Verify critical information.
+                </p>
+            </div>
         </div>
     );
 }
@@ -169,15 +465,10 @@ export default function ThreadChatPage() {
     const [inputQuery, setInputQuery] = useState("");
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editTitleValue, setEditTitleValue] = useState("");
-
-    // The single chunk currently highlighted in the PDF viewer.
     const [activeChunks, setActiveChunks] = useState<DocumentChunk[]>([]);
-
-    // Maps assistant message id → AgentDocumentReport, populated during the session.
     const [agentResponses, setAgentResponses] = useState<
         Record<string, AgentDocumentReport>
     >({});
-
     const [localMessages, setLocalMessages] = useState<MessageResponse[]>([]);
 
     // ── Queries ──────────────────────────────────────────────────────────────
@@ -186,7 +477,7 @@ export default function ThreadChatPage() {
         queryKey: ["thread", threadId],
         queryFn: async () => {
             const res = await apiClient.get<ThreadResponse>(`/threads/${threadId}`);
-            setEditTitleValue(res.data.title || "Untitled Thread");
+            setEditTitleValue(res.data.title || "");
             return res.data;
         },
     });
@@ -201,6 +492,8 @@ export default function ThreadChatPage() {
             return res.data;
         },
     });
+
+    const isDocMode = !!thread?.doc_id;
 
     // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -242,12 +535,10 @@ export default function ThreadChatPage() {
                 data.user_message,
                 data.assistant_message,
             ]);
-            // Store the full agent response keyed by the assistant message id.
             setAgentResponses((prev) => ({
                 ...prev,
                 [data.assistant_message.id]: data.agent_response,
             }));
-            // Show the first most-relevant chunk in the PDF viewer immediately.
             const first = data.agent_response.most_relevant_chunks[0];
             if (first) setActiveChunks([first]);
         },
@@ -272,185 +563,58 @@ export default function ThreadChatPage() {
         }
     };
 
+    // ── Shared chat props ────────────────────────────────────────────────────
+
+    const chatProps = {
+        thread,
+        threadId,
+        isDocMode,
+        messagesLoading,
+        localMessages,
+        agentResponses,
+        chatMutation: chatMutation as ReturnType<typeof useMutation<ThreadChatResponse, Error, string>>,
+        inputQuery,
+        setInputQuery,
+        handleSubmit,
+        handleTitleSubmit,
+        isEditingTitle,
+        setIsEditingTitle,
+        editTitleValue,
+        setEditTitleValue,
+        deleteThread: deleteThread as ReturnType<typeof useMutation<void, Error, void>>,
+        setActiveChunks,
+        messagesEndRef,
+    };
+
     // ── Render ───────────────────────────────────────────────────────────────
 
-    return (
-        <div className="flex h-full overflow-hidden">
-            {/* ── PDF Viewer (70%) ── */}
-            <div className="w-[70%] flex flex-col overflow-hidden">
-                {thread?.doc_id ? (
-                    <PdfViewer docId={thread.doc_id} chunks={activeChunks} />
-                ) : (
-                    <div className="flex-1 flex items-center justify-center bg-slate-100 text-slate-400">
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                    </div>
-                )}
-            </div>
-
-            {/* ── Chat panel (30%) ── */}
-            <div className="w-[30%] flex flex-col border-l border-slate-200 bg-white min-w-0">
-                {/* Header */}
-                <div className="h-14 border-b border-slate-200 flex items-center justify-between px-4 bg-slate-50 shrink-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                        {isEditingTitle ? (
-                            <div className="flex items-center gap-1.5">
-                                <input
-                                    type="text"
-                                    value={editTitleValue}
-                                    onChange={(e) => setEditTitleValue(e.target.value)}
-                                    onKeyDown={(e) =>
-                                        e.key === "Enter" && handleTitleSubmit()
-                                    }
-                                    className="px-2 py-1 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-900 w-36"
-                                    autoFocus
-                                />
-                                <button
-                                    onClick={handleTitleSubmit}
-                                    className="text-green-600 hover:text-green-700"
-                                >
-                                    <Check className="h-4 w-4" />
-                                </button>
-                                <button
-                                    onClick={() => setIsEditingTitle(false)}
-                                    className="text-slate-400 hover:text-slate-600"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <h2 className="text-sm font-semibold text-slate-800 truncate">
-                                    {thread?.title || "Untitled Thread"}
-                                </h2>
-                                <button
-                                    onClick={() => setIsEditingTitle(true)}
-                                    className="shrink-0 text-slate-400 hover:text-slate-700 transition-colors"
-                                >
-                                    <Edit2 className="h-3.5 w-3.5" />
-                                </button>
-                            </>
-                        )}
-                    </div>
-
-                    <button
-                        onClick={() => {
-                            if (confirm("Delete this thread?")) deleteThread.mutate();
-                        }}
-                        className="shrink-0 text-slate-400 hover:text-red-600 transition-colors"
-                        title="Delete Thread"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </button>
-                </div>
-
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-5">
-                    {messagesLoading ? (
-                        <div className="flex justify-center items-center h-full">
-                            <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
-                        </div>
-                    ) : localMessages.length === 0 ? (
-                        <div className="flex flex-col justify-center items-center h-full text-slate-400 px-4">
-                            <Bot className="h-10 w-10 mb-3 opacity-20" />
-                            <p className="text-sm font-medium text-slate-600 text-center">
-                                Start a legal analysis
-                            </p>
-                            <p className="text-xs mt-1 text-center text-slate-400">
-                                Ask a question about this document.
-                            </p>
-                        </div>
+    if (isDocMode) {
+        return (
+            <div className="flex h-full overflow-hidden">
+                {/* PDF Viewer (70%) */}
+                <div className="w-[70%] flex flex-col overflow-hidden">
+                    {thread?.doc_id ? (
+                        <PdfViewer docId={thread.doc_id} chunks={activeChunks} />
                     ) : (
-                        localMessages.map((msg) =>
-                            msg.role === "user" ? (
-                                // ── User bubble ──────────────────────────────
-                                <div key={msg.id} className="flex justify-end gap-2">
-                                    <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm max-w-[85%]">
-                                        {msg.content}
-                                    </div>
-                                    <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded bg-slate-900 text-white mt-0.5">
-                                        <User className="h-4 w-4" />
-                                    </div>
-                                </div>
-                            ) : (
-                                // ── Assistant bubble ─────────────────────────
-                                <div key={msg.id} className="flex gap-2">
-                                    <div className="flex items-start justify-center shrink-0 w-7 h-7 rounded border border-slate-200 bg-white text-slate-700 mt-0.5">
-                                        <Bot className="h-4 w-4 mt-1.5" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <AssistantMessage
-                                            content={msg.content}
-                                            agentReport={agentResponses[msg.id]}
-                                            onChunkSelect={(chunk) =>
-                                                setActiveChunks([chunk])
-                                            }
-                                        />
-                                    </div>
-                                </div>
-                            )
-                        )
+                        <div className="flex-1 flex items-center justify-center bg-slate-100 text-slate-400">
+                            <Loader2 className="h-6 w-6 animate-spin" />
+                        </div>
                     )}
-
-                    {/* Typing indicator while waiting for response */}
-                    {chatMutation.isPending && (
-                        <>
-                            <div className="flex justify-end gap-2">
-                                <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm max-w-[85%] opacity-70">
-                                    {chatMutation.variables}
-                                </div>
-                                <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded bg-slate-900 text-white mt-0.5">
-                                    <User className="h-4 w-4" />
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded border border-slate-200 bg-white text-slate-700 mt-0.5">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                </div>
-                                <div className="pt-1.5">
-                                    <span className="text-xs text-slate-500 animate-pulse">
-                                        Analyzing document…
-                                    </span>
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input */}
-                <div className="p-3 border-t border-slate-200 shrink-0">
-                    <form
-                        onSubmit={handleSubmit}
-                        className="relative flex items-end shadow-sm"
-                    >
-                        <textarea
-                            value={inputQuery}
-                            onChange={(e) => setInputQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    handleSubmit(e);
-                                }
-                            }}
-                            placeholder="Ask a question… (Shift+Enter for new line)"
-                            className="w-full resize-none min-h-[48px] max-h-[160px] border border-slate-300 rounded-lg py-3 pl-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
-                            rows={1}
-                            disabled={chatMutation.isPending}
-                        />
-                        <Button
-                            type="submit"
-                            size="icon"
-                            disabled={!inputQuery.trim() || chatMutation.isPending}
-                            className="absolute right-1.5 bottom-1.5 h-9 w-9 bg-slate-900 rounded-md shadow-sm transition-transform active:scale-95"
-                        >
-                            <Send className="h-4 w-4" />
-                        </Button>
-                    </form>
-                    <p className="text-center text-xs text-slate-400 mt-1.5">
-                        TemisAI can make mistakes. Verify critical information.
-                    </p>
+                {/* Chat panel (30%) */}
+                <div className="w-[30%] flex flex-col min-w-0">
+                    <ChatPanel {...chatProps} />
                 </div>
+            </div>
+        );
+    }
+
+    // ChatLegal mode — full-width centered chat
+    return (
+        <div className="flex h-full overflow-hidden justify-center">
+            <div className="w-full max-w-3xl flex flex-col min-w-0">
+                <ChatPanel {...chatProps} />
             </div>
         </div>
     );

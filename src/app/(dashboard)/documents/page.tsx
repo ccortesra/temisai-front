@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { DocumentAPIReturn, ThreadResponse } from "@/lib/types/api";
-import { UploadCloud, Trash2, File as FileIcon, Loader2, AlertCircle, MessageSquarePlus } from "lucide-react";
+import { UploadCloud, Trash2, File as FileIcon, Loader2, AlertCircle, ScanText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
@@ -185,15 +185,15 @@ export default function DocumentsPage() {
                                                 createThreadMutation.mutate(doc);
                                             }}
                                             disabled={creatingThreadForDoc === doc.id}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md transition-colors"
-                                            title="Start a new thread for this document"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md transition-colors"
+                                            title="Analyze this document with OCR Expert"
                                         >
                                             {creatingThreadForDoc === doc.id ? (
                                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                             ) : (
-                                                <MessageSquarePlus className="h-3.5 w-3.5" />
+                                                <ScanText className="h-3.5 w-3.5" />
                                             )}
-                                            New Thread
+                                            OCR Expert
                                         </button>
                                         <button
                                             onClick={() => {

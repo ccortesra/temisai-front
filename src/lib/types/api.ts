@@ -1,5 +1,6 @@
-export interface ConstitutionChunk {
+export interface CodeChunk {
     id: string;
+    code_name: string;
     articulo: string;
     breadcrumb: string;
     capitulo: string;
@@ -21,7 +22,7 @@ export interface AgentDocumentReport {
     retrieved_chunks: DocumentChunk[];
     most_relevant_chunks: DocumentChunk[];
     answer: string;
-    constitution_chunks: ConstitutionChunk[] | null;
+    law_chunks: CodeChunk[] | null;
 }
 
 export interface DocumentAPIReturn {
@@ -53,13 +54,13 @@ export interface ThreadChatResponse {
 
 export interface ThreadCreate {
     title?: string | null;
-    doc_id: string;
+    doc_id?: string | null;
 }
 
 export interface ThreadResponse {
     id: string;
     user_id: string;
-    doc_id: string;
+    doc_id?: string | null;
     title?: string | null;
     created_at?: string | null;
     updated_at?: string | null;
