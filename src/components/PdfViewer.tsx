@@ -78,7 +78,7 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                 objectUrlRef.current = url;
                 setPdfUrl(url);
             } catch {
-                if (!cancelled) setPdfError("Failed to load PDF.");
+                if (!cancelled) setPdfError("No se pudo cargar el PDF.");
             }
         };
         fetchPdf();
@@ -122,7 +122,7 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                         onClick={() => setZoomFactor((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
                         className="p-1 rounded hover:bg-slate-700 transition-colors disabled:opacity-30"
                         disabled={zoomFactor <= 0.5}
-                        aria-label="Zoom out"
+                        aria-label="Alejar"
                     >
                         <ZoomOut className="h-4 w-4" />
                     </button>
@@ -133,7 +133,7 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                         onClick={() => setZoomFactor((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
                         className="p-1 rounded hover:bg-slate-700 transition-colors disabled:opacity-30"
                         disabled={zoomFactor >= 3}
-                        aria-label="Zoom in"
+                        aria-label="Acercar"
                     >
                         <ZoomIn className="h-4 w-4" />
                     </button>
@@ -142,20 +142,20 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                 {/* Page count */}
                 {numPages > 0 && (
                     <span className="text-xs text-slate-400 tabular-nums">
-                        {numPages} pages
+                        {numPages} paginas
                     </span>
                 )}
 
                 {/* Search hint */}
                 <span className="flex items-center gap-1 text-xs text-slate-500 ml-auto">
                     <Search className="h-3 w-3" />
-                    Ctrl+F to search
+                    Ctrl+F para buscar
                 </span>
 
                 {/* Highlight count */}
                 {chunks.length > 0 && (
                     <span className="text-xs text-yellow-300 font-medium">
-                        {chunks.length} chunk{chunks.length > 1 ? "s" : ""} highlighted
+                        {chunks.length} fragmento{chunks.length > 1 ? "s" : ""} resaltado{chunks.length > 1 ? "s" : ""}
                     </span>
                 )}
             </div>
@@ -170,7 +170,7 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                 ) : !pdfUrl ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2 p-8">
                         <Loader2 className="h-8 w-8 animate-spin" />
-                        <p className="text-sm">Loading document…</p>
+                        <p className="text-sm">Cargando documento…</p>
                     </div>
                 ) : (
                     <Document
@@ -179,7 +179,7 @@ export default function PdfViewer({ docId, chunks = [] }: PdfViewerProps) {
                         loading={
                             <div className="flex items-center justify-center gap-2 text-slate-400 p-8">
                                 <Loader2 className="h-6 w-6 animate-spin" />
-                                <span className="text-sm">Rendering…</span>
+                                <span className="text-sm">Renderizando…</span>
                             </div>
                         }
                     >

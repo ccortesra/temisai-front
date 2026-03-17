@@ -26,7 +26,7 @@ export default function NewThreadPage() {
         },
         onError: (err: any) => {
             console.error("Failed to create thread", err);
-            alert(err.response?.data?.detail?.[0]?.msg || "Failed to create thread");
+            alert(err.response?.data?.detail?.[0]?.msg || "No se pudo crear la conversacion");
             router.push("/documents");
         },
     });
@@ -40,7 +40,7 @@ export default function NewThreadPage() {
         <div className="flex h-full w-full items-center justify-center">
             <div className="flex flex-col items-center text-slate-500">
                 <Loader2 className="h-8 w-8 animate-spin mb-4" />
-                <p>{docId ? "Creating OCR Expert session..." : "Creating ChatLegal session..."}</p>
+                <p>{docId ? "Creando sesion de Experto OCR..." : "Creando sesion de ChatLegal..."}</p>
             </div>
         </div>
     );

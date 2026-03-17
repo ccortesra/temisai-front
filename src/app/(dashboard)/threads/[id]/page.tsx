@@ -11,6 +11,7 @@ import {
     AgentDocumentReport,
     DocumentChunk,
     CodeChunk,
+    CodeDocumentResponse,
 } from "@/lib/types/api";
 import {
     Send,
@@ -27,6 +28,7 @@ import {
     BookOpen,
     Scale,
     ScanText,
+    BookMarked,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -80,9 +82,9 @@ function LawChunksCard({ chunks }: { chunks: CodeChunk[] }) {
     return (
         <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs overflow-hidden">
             <div className="px-3 py-2 bg-indigo-100/70 border-b border-indigo-200">
-                <span className="font-semibold text-indigo-900">⚖️ Legal Code Sources</span>
+                <span className="font-semibold text-indigo-900">⚖️ Fuentes del codigo legal</span>
                 <p className="mt-0.5 text-indigo-700">
-                    Expand an article to view the full legal chunk.
+                    Expande un articulo para ver el fragmento legal completo.
                 </p>
             </div>
 
@@ -103,7 +105,7 @@ function LawChunksCard({ chunks }: { chunks: CodeChunk[] }) {
                                     </p>
                                 </div>
                                 <span className="shrink-0 text-indigo-500 text-[11px]">
-                                    Expand
+                                    Expandir
                                 </span>
                             </div>
                             <p className="mt-1 text-indigo-700 line-clamp-2">
@@ -113,7 +115,7 @@ function LawChunksCard({ chunks }: { chunks: CodeChunk[] }) {
 
                         <div className="px-3 pb-3 pt-1 border-t border-indigo-200">
                             <p className="text-indigo-700">
-                                🧭 <span className="font-medium">Path:</span> {chunk.breadcrumb}
+                                🧭 <span className="font-medium">Ruta:</span> {chunk.breadcrumb}
                             </p>
                             <div className="mt-2 rounded border border-indigo-200 bg-white p-2.5">
                                 <p className="whitespace-pre-wrap text-slate-700 leading-relaxed">
@@ -153,14 +155,14 @@ function ChunkNavigatorCard({
             <div className="flex items-center justify-between px-3 py-2 bg-amber-100/70 border-b border-amber-200">
                 <span className="flex items-center gap-1.5 font-semibold text-amber-800">
                     <FileText className="h-3.5 w-3.5" />
-                    Sources
+                    Fuentes
                 </span>
                 <div className="flex items-center gap-0.5 text-amber-700">
                     <button
                         onClick={() => goTo(index - 1)}
                         disabled={index === 0}
                         className="p-1 rounded hover:bg-amber-200 disabled:opacity-30 transition-colors"
-                        aria-label="Previous chunk"
+                        aria-label="Fragmento anterior"
                     >
                         <ChevronLeft className="h-3.5 w-3.5" />
                     </button>
@@ -171,7 +173,7 @@ function ChunkNavigatorCard({
                         onClick={() => goTo(index + 1)}
                         disabled={index === chunks.length - 1}
                         className="p-1 rounded hover:bg-amber-200 disabled:opacity-30 transition-colors"
-                        aria-label="Next chunk"
+                        aria-label="Siguiente fragmento"
                     >
                         <ChevronRight className="h-3.5 w-3.5" />
                     </button>
@@ -188,7 +190,7 @@ function ChunkNavigatorCard({
             {/* Page indicator */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-amber-200/60 text-amber-700">
                 <BookOpen className="h-3 w-3" />
-                <span>Page {current.page + 1}</span>
+                <span>Pagina {current.page + 1}</span>
             </div>
         </div>
     );
@@ -200,13 +202,13 @@ function AssistantMessage({
     content,
     agentReport,
     onChunkSelect,
+    isDocMode,
 }: {
     content: string;
     agentReport?: AgentDocumentReport;
     onChunkSelect: (chunk: DocumentChunk) => void;
+    isDocMode: boolean;
 }) {
-    // If we have the full report from the current session, use its answer.
-    // Otherwise fall back to the stored text content (historical messages).
     const answerText = agentReport?.answer ?? content;
     const chunks = agentReport?.most_relevant_chunks ?? [];
     const lawChunks = agentReport?.law_chunks ?? [];
@@ -216,7 +218,7 @@ function AssistantMessage({
             <p className="text-sm text-slate-800 leading-relaxed">
                 <MarkdownText text={answerText} />
             </p>
-            {chunks.length > 0 && (
+            {isDocMode && chunks.length > 0 && (
                 <ChunkNavigatorCard chunks={chunks} onChunkSelect={onChunkSelect} />
             )}
             {lawChunks.length > 0 && <LawChunksCard chunks={lawChunks} />}
@@ -267,19 +269,53 @@ function ChatPanel({
 }) {
     const ModeIcon = isDocMode ? ScanText : Scale;
     const modeColor = isDocMode ? "text-amber-500" : "text-emerald-500";
-    const modeLabel = isDocMode ? "OCR Expert" : "ChatLegal";
+    const modeLabel = isDocMode ? "Experto OCR" : "ChatLegal";
     const emptyTitle = isDocMode
-        ? "Start a document analysis"
-        : "Start a legal conversation";
+        ? "Inicia un analisis de documento"
+        : "Inicia una conversacion legal";
     const emptySubtitle = isDocMode
-        ? "Ask a question about this document."
-        : "Ask any question about Colombian law.";
+        ? "Haz una pregunta sobre este documento."
+        : "Haz cualquier pregunta sobre derecho colombiano.";
     const pendingLabel = isDocMode
-        ? "Analyzing document…"
-        : "Searching legal sources…";
+        ? "Analizando documento…"
+        : "Razonando…";
+
+    const {
+        data: codeDocuments,
+        isLoading: isCodeDocumentsLoading,
+        isError: isCodeDocumentsError,
+    } = useQuery({
+        queryKey: ["code-documents"],
+        queryFn: async () => {
+            const endpoints = ["/code-documents"];
+            let lastError: unknown;
+
+            for (const endpoint of endpoints) {
+                try {
+                    const res = await apiClient.get<any[]>(endpoint);
+                    if (Array.isArray(res.data)) {
+                        return res.data.map((item) => ({
+                            doc_id: item.doc_id ?? item.id ?? "",
+                            name: item.name ?? item.filename ?? "Documento legal",
+                        })) as CodeDocumentResponse[];
+                    }
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError ?? new Error("No se pudieron cargar los documentos legales.");
+        },
+        enabled: !isDocMode,
+    });
 
     return (
-        <div className="flex-1 flex flex-col border-l border-slate-200 bg-white min-w-0">
+        <div className={cn(
+            "flex-1 flex flex-col bg-white min-w-0 min-h-0",
+            isDocMode
+                ? "border-t md:border-t-0 md:border-l border-slate-200"
+                : "border-l border-slate-200"
+        )}>
             {/* Header */}
             <div className="h-14 border-b border-slate-200 flex items-center justify-between px-4 bg-slate-50 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
@@ -326,17 +362,48 @@ function ChatPanel({
 
                 <button
                     onClick={() => {
-                        if (confirm("Delete this thread?")) deleteThread.mutate();
+                        if (confirm("Eliminar esta conversacion?")) deleteThread.mutate();
                     }}
                     className="shrink-0 text-slate-400 hover:text-red-600 transition-colors"
-                    title="Delete Thread"
+                    title="Eliminar conversacion"
                 >
                     <Trash2 className="h-4 w-4" />
                 </button>
             </div>
 
+            {!isDocMode && (
+                <div className="px-4 py-3 border-b border-slate-200 bg-white shrink-0">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                        Fuentes legales disponibles
+                    </p>
+                    {isCodeDocumentsLoading ? (
+                        <p className="text-xs text-slate-500">Cargando fuentes legales...</p>
+                    ) : isCodeDocumentsError ? (
+                        <p className="text-xs text-red-600">
+                            No se pudieron cargar las fuentes legales disponibles.
+                        </p>
+                    ) : codeDocuments && codeDocuments.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                            {codeDocuments.map((doc) => (
+                                <div
+                                    key={doc.doc_id || doc.name}
+                                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700"
+                                >
+                                    <BookMarked className="h-3 w-3 shrink-0 text-emerald-500" />
+                                    <span className="text-xs font-medium">{doc.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-slate-500">
+                            Aun no hay fuentes legales disponibles.
+                        </p>
+                    )}
+                </div>
+            )}
+
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
                 {messagesLoading ? (
                     <div className="flex justify-center items-center h-full">
                         <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
@@ -350,6 +417,7 @@ function ChatPanel({
                         <p className="text-xs mt-1 text-center text-slate-400">
                             {emptySubtitle}
                         </p>
+
                     </div>
                 ) : (
                     localMessages.map((msg) =>
@@ -379,6 +447,7 @@ function ChatPanel({
                                         onChunkSelect={(chunk) =>
                                             setActiveChunks([chunk])
                                         }
+                                        isDocMode={isDocMode}
                                     />
                                 </div>
                             </div>
@@ -429,8 +498,8 @@ function ChatPanel({
                         }}
                         placeholder={
                             isDocMode
-                                ? "Ask about this document… (Shift+Enter for new line)"
-                                : "Ask a legal question… (Shift+Enter for new line)"
+                                ? "Pregunta sobre este documento… (Shift+Enter para nueva linea)"
+                                : "Haz una pregunta legal… (Shift+Enter para nueva linea)"
                         }
                         className="w-full resize-none min-h-[48px] max-h-[160px] border border-slate-300 rounded-lg py-3 pl-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                         rows={1}
@@ -446,7 +515,7 @@ function ChatPanel({
                     </Button>
                 </form>
                 <p className="text-center text-xs text-slate-400 mt-1.5">
-                    TemisAI can make mistakes. Verify critical information.
+                    TemisAI puede equivocarse. Verifica la informacion critica.
                 </p>
             </div>
         </div>
@@ -590,9 +659,9 @@ export default function ThreadChatPage() {
 
     if (isDocMode) {
         return (
-            <div className="flex h-full overflow-hidden">
-                {/* PDF Viewer (70%) */}
-                <div className="w-[70%] flex flex-col overflow-hidden">
+            <div className="flex h-full overflow-hidden flex-col md:flex-row">
+                {/* PDF Viewer */}
+                <div className="w-full h-[48%] md:h-auto md:w-[70%] flex flex-col overflow-hidden">
                     {thread?.doc_id ? (
                         <PdfViewer docId={thread.doc_id} chunks={activeChunks} />
                     ) : (
@@ -602,8 +671,8 @@ export default function ThreadChatPage() {
                     )}
                 </div>
 
-                {/* Chat panel (30%) */}
-                <div className="w-[30%] flex flex-col min-w-0">
+                {/* Chat panel */}
+                <div className="w-full h-[52%] md:h-auto md:w-[30%] flex flex-col min-w-0 min-h-0">
                     <ChatPanel {...chatProps} />
                 </div>
             </div>
@@ -612,8 +681,8 @@ export default function ThreadChatPage() {
 
     // ChatLegal mode — full-width centered chat
     return (
-        <div className="flex h-full overflow-hidden justify-center">
-            <div className="w-full max-w-3xl flex flex-col min-w-0">
+        <div className="h-full overflow-hidden flex justify-center">
+            <div className="w-full max-w-3xl h-full flex flex-col min-w-0 min-h-0">
                 <ChatPanel {...chatProps} />
             </div>
         </div>

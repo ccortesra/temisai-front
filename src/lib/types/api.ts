@@ -71,6 +71,11 @@ export interface ThreadUpdate {
 }
 
 
+export interface CodeDocumentResponse {
+    doc_id: string;
+    name: string;
+}
+
 export interface HTTPValidationError {
     detail: ValidationError[];
 }

@@ -84,9 +84,12 @@ export default function DashboardLayout({
                 )}
             >
                 <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800">
-                    <span className="text-lg font-semibold text-white tracking-tight">
+                    <Link
+                        href="/documents"
+                        className="text-lg font-semibold text-white tracking-tight hover:text-slate-200 transition-colors"
+                    >
                         TemisAI
-                    </span>
+                    </Link>
                     <button
                         className="md:hidden"
                         onClick={() => setSidebarOpen(false)}
@@ -107,7 +110,7 @@ export default function DashboardLayout({
                             )}
                         >
                             <FileText className="mr-3 flex-shrink-0 h-5 w-5" />
-                            Documents
+                            Documentos
                         </Link>
 
                         {/* ── ChatLegal section ── */}
@@ -121,7 +124,7 @@ export default function DashboardLayout({
                                     onClick={() => createChatLegal.mutate()}
                                     disabled={createChatLegal.isPending}
                                     className="text-slate-500 hover:text-white transition-colors"
-                                    title="New legal chat"
+                                    title="Nuevo chat legal"
                                 >
                                     <Plus className="h-3.5 w-3.5" />
                                 </button>
@@ -141,25 +144,25 @@ export default function DashboardLayout({
                                     >
                                         <Scale className="mr-2.5 flex-shrink-0 h-3.5 w-3.5 text-emerald-500" />
                                         <span className="truncate">
-                                            {thread.title || "New Chat"}
+                                            {thread.title || "Nuevo chat"}
                                         </span>
                                     </Link>
                                 ))}
 
                                 {chatLegalThreads.length === 0 && (
                                     <p className="px-2 text-xs text-slate-500 italic">
-                                        No conversations yet
+                                        Aun no hay conversaciones
                                     </p>
                                 )}
                             </div>
                         </div>
 
-                        {/* ── OCR Expert section ── */}
+                        {/* ── Experto OCR section ── */}
                         <div className="pt-3 pb-2">
                             <div className="flex items-center px-2 mb-2">
                                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                                     <ScanText className="h-3 w-3" />
-                                    OCR Expert
+                                    Experto OCR
                                 </p>
                             </div>
 
@@ -177,14 +180,14 @@ export default function DashboardLayout({
                                     >
                                         <ScanText className="mr-2.5 flex-shrink-0 h-3.5 w-3.5 text-amber-500" />
                                         <span className="truncate">
-                                            {thread.title || "Untitled"}
+                                            {thread.title || "Sin titulo"}
                                         </span>
                                     </Link>
                                 ))}
 
                                 {ocrExpertThreads.length === 0 && (
                                     <p className="px-2 text-xs text-slate-500 italic">
-                                        Start from the Documents page
+                                        Empieza desde la pagina de Documentos
                                     </p>
                                 )}
                             </div>
@@ -198,7 +201,7 @@ export default function DashboardLayout({
                         className="flex items-center w-full px-2 py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 hover:text-white transition-colors"
                     >
                         <LogOut className="mr-3 h-5 w-5" />
-                        Sign Out
+                        Cerrar sesion
                     </button>
                 </div>
             </aside>
@@ -211,12 +214,15 @@ export default function DashboardLayout({
                     >
                         <Menu className="h-6 w-6" />
                     </button>
-                    <span className="ml-4 font-semibold text-slate-900">
+                    <Link
+                        href="/"
+                        className="ml-4 font-semibold text-slate-900 hover:text-slate-700 transition-colors"
+                    >
                         TemisAI
-                    </span>
+                    </Link>
                 </header>
 
-                <main className="flex-1 relative overflow-y-auto focus:outline-none">
+                <main className="flex-1 relative min-h-0 overflow-y-auto focus:outline-none">
                     {children}
                 </main>
             </div>
