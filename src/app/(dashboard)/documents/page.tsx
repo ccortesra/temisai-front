@@ -18,10 +18,9 @@ export default function DocumentsPage() {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [creatingThreadForDoc, setCreatingThreadForDoc] = useState<string | null>(null);
+    const maxDocsErrorText = "User has reached the maximum number of OCR documents.";
     const hasReachedMaxDocs = !!uploadError && (
-        uploadError.toLowerCase().includes("maximum number of ocr documents") ||
-        uploadError.toLowerCase().includes("maximum number of documents") ||
-        uploadError.toLowerCase().includes("maximo")
+        uploadError.includes(maxDocsErrorText)
     );
 
     // Fetch Documents
@@ -85,8 +84,10 @@ export default function DocumentsPage() {
             queryClient.invalidateQueries({ queryKey: ["documents"] });
             if (fileInputRef.current) fileInputRef.current.value = "";
         } catch (err: any) {
+            const detail = err.response?.data?.detail;
             setUploadError(
-                err.response?.data?.detail?.[0]?.msg ||
+                (typeof detail === "string" && detail) ||
+                detail?.[0]?.msg ||
                 err.message ||
                 "No se pudo subir el documento. Asegurate de que sea un PDF valido."
             );

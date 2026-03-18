@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
     LogOut,
     FileText,
+    FilePenLine,
     MessageSquare,
     Menu,
     X,
@@ -111,6 +112,19 @@ export default function DashboardLayout({
                         >
                             <FileText className="mr-3 flex-shrink-0 h-5 w-5" />
                             Documentos
+                        </Link>
+
+                        <Link
+                            href="/derecho-peticion"
+                            className={cn(
+                                "flex items-center px-2 py-2 text-sm font-medium rounded-md",
+                                pathname === "/derecho-peticion"
+                                    ? "bg-slate-800 text-white"
+                                    : "hover:bg-slate-800 hover:text-white"
+                            )}
+                        >
+                            <FilePenLine className="mr-3 flex-shrink-0 h-5 w-5" />
+                            Derecho de peticion
                         </Link>
 
                         {/* ── ChatLegal section ── */}

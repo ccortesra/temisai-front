@@ -76,6 +76,71 @@ export interface CodeDocumentResponse {
     name: string;
 }
 
+export type TipoPeticion =
+    | "informacion"
+    | "consulta"
+    | "queja"
+    | "reclamo"
+    | "sugerencia";
+
+export type MedioRespuesta = "correo_electronico" | "fisico";
+
+export interface SolicitanteInput {
+    nombre_completo: string;
+    tipo_documento: string;
+    numero_documento: string;
+    direccion_notificacion: string;
+    correo_electronico: string;
+    telefono?: string | null;
+}
+
+export interface DestinatarioInput {
+    entidad: string;
+    nombre_funcionario?: string | null;
+    cargo_funcionario?: string | null;
+    direccion?: string | null;
+    correo?: string | null;
+}
+
+export interface AnexoInput {
+    nombre: string;
+    descripcion?: string | null;
+}
+
+export interface DerechoPeticionInput {
+    tipo_peticion: TipoPeticion;
+    solicitante: SolicitanteInput;
+    destinatario: DestinatarioInput;
+    ciudad: string;
+    fecha: string;
+    asunto: string;
+    hechos: string[];
+    peticiones: string[];
+    anexos: AnexoInput[];
+    medio_respuesta: MedioRespuesta;
+}
+
+export interface GeneratedDocContent {
+    nombre_completo?: string | null;
+    numero_documento?: string | null;
+    correo?: string | null;
+    direccion?: string | null;
+    ciudad?: string | null;
+    telefono?: string | null;
+    peticiones: string[];
+    finalidad?: string | null;
+    anexos: AnexoInput[];
+    hechos: string[];
+}
+
+export interface GeneratedDocResponse {
+    gen_doc_id: string;
+    document_type: string;
+    created_at: string;
+    content: GeneratedDocContent;
+    text: string;
+}
+
 export interface HTTPValidationError {
     detail: ValidationError[];
 }
