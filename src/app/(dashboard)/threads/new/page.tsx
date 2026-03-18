@@ -14,10 +14,10 @@ export default function NewThreadPage() {
     const docId = searchParams.get("docId");
 
     const createThread = useMutation({
-        mutationFn: async (docId: string) => {
-            const res = await apiClient.post<ThreadResponse>("/threads", {
-                doc_id: docId,
-            });
+        mutationFn: async (docId?: string) => {
+            const body: Record<string, string> = {};
+            if (docId) body.doc_id = docId;
+            const res = await apiClient.post<ThreadResponse>("/threads", body);
             return res.data;
         },
         onSuccess: (data) => {
@@ -26,17 +26,13 @@ export default function NewThreadPage() {
         },
         onError: (err: any) => {
             console.error("Failed to create thread", err);
-            alert(err.response?.data?.detail?.[0]?.msg || "Failed to create thread");
+            alert(err.response?.data?.detail?.[0]?.msg || "No se pudo crear la conversacion");
             router.push("/documents");
         },
     });
 
     useEffect(() => {
-        if (!docId) {
-            router.replace("/documents");
-            return;
-        }
-        createThread.mutate(docId);
+        createThread.mutate(docId || undefined);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -44,7 +40,7 @@ export default function NewThreadPage() {
         <div className="flex h-full w-full items-center justify-center">
             <div className="flex flex-col items-center text-slate-500">
                 <Loader2 className="h-8 w-8 animate-spin mb-4" />
-                <p>Creating new thread...</p>
+                <p>{docId ? "Creando sesion de Experto OCR..." : "Creando sesion de ChatLegal..."}</p>
             </div>
         </div>
     );

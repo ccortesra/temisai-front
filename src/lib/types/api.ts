@@ -1,5 +1,6 @@
-export interface ConstitutionChunk {
+export interface CodeChunk {
     id: string;
+    code_name: string;
     articulo: string;
     breadcrumb: string;
     capitulo: string;
@@ -21,7 +22,7 @@ export interface AgentDocumentReport {
     retrieved_chunks: DocumentChunk[];
     most_relevant_chunks: DocumentChunk[];
     answer: string;
-    constitution_chunks: ConstitutionChunk[] | null;
+    law_chunks: CodeChunk[] | null;
 }
 
 export interface DocumentAPIReturn {
@@ -53,13 +54,13 @@ export interface ThreadChatResponse {
 
 export interface ThreadCreate {
     title?: string | null;
-    doc_id: string;
+    doc_id?: string | null;
 }
 
 export interface ThreadResponse {
     id: string;
     user_id: string;
-    doc_id: string;
+    doc_id?: string | null;
     title?: string | null;
     created_at?: string | null;
     updated_at?: string | null;
@@ -69,6 +70,76 @@ export interface ThreadUpdate {
     title: string;
 }
 
+
+export interface CodeDocumentResponse {
+    doc_id: string;
+    name: string;
+}
+
+export type TipoPeticion =
+    | "informacion"
+    | "consulta"
+    | "queja"
+    | "reclamo"
+    | "sugerencia";
+
+export type MedioRespuesta = "correo_electronico" | "fisico";
+
+export interface SolicitanteInput {
+    nombre_completo: string;
+    tipo_documento: string;
+    numero_documento: string;
+    direccion_notificacion: string;
+    correo_electronico: string;
+    telefono?: string | null;
+}
+
+export interface DestinatarioInput {
+    entidad: string;
+    nombre_funcionario?: string | null;
+    cargo_funcionario?: string | null;
+    direccion?: string | null;
+    correo?: string | null;
+}
+
+export interface AnexoInput {
+    nombre: string;
+    descripcion?: string | null;
+}
+
+export interface DerechoPeticionInput {
+    tipo_peticion: TipoPeticion;
+    solicitante: SolicitanteInput;
+    destinatario: DestinatarioInput;
+    ciudad: string;
+    fecha: string;
+    asunto: string;
+    hechos: string[];
+    peticiones: string[];
+    anexos: AnexoInput[];
+    medio_respuesta: MedioRespuesta;
+}
+
+export interface GeneratedDocContent {
+    nombre_completo?: string | null;
+    numero_documento?: string | null;
+    correo?: string | null;
+    direccion?: string | null;
+    ciudad?: string | null;
+    telefono?: string | null;
+    peticiones: string[];
+    finalidad?: string | null;
+    anexos: AnexoInput[];
+    hechos: string[];
+}
+
+export interface GeneratedDocResponse {
+    gen_doc_id: string;
+    document_type: string;
+    created_at: string;
+    content: GeneratedDocContent;
+    text: string;
+}
 
 export interface HTTPValidationError {
     detail: ValidationError[];

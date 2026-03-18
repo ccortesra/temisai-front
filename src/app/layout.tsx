@@ -7,8 +7,8 @@ import { AuthProvider } from "@/context/AuthContext";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TemisAI - Legal Assistant",
-  description: "Production-grade agentic legal system.",
+  title: "TemisAI - Asistente Legal",
+  description: "Sistema legal agéntico listo para producción.",
 };
 
 export default function RootLayout({
