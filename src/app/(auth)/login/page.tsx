@@ -4,17 +4,14 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api/client";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { ArrowRight, ShieldCheck, Scale, Sparkles } from "lucide-react";
+import { ShieldCheck, Scale, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
     const { login } = useAuth();
-    const searchParams = useSearchParams();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const signupStatus = searchParams.get("signup");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -103,13 +100,6 @@ export default function LoginPage() {
                             </p>
                         </div>
 
-                        {signupStatus === "success" && (
-                            <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                                Tu cuenta fue creada. Confirma tu correo antes de iniciar
-                                sesion.
-                            </div>
-                        )}
-
                         <form onSubmit={handleSubmit} className="space-y-5">
                             {error && (
                                 <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
@@ -161,18 +151,24 @@ export default function LoginPage() {
                             </button>
                         </form>
 
-                        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <p className="text-sm text-slate-700">
-                                Eres nuevo en TemisAI?
-                            </p>
+                        <p className="mt-6 text-xs text-slate-500 leading-relaxed">
+                            Al iniciar sesion aceptas nuestros{" "}
                             <Link
-                                href="/signup"
-                                className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800"
+                                href="/terminos-y-condiciones"
+                                className="font-medium text-slate-700 hover:text-slate-900 underline underline-offset-2"
                             >
-                                Crea tu cuenta
-                                <ArrowRight className="h-4 w-4" />
+                                Terminos y Condiciones
+                            </Link>{" "}
+                            y la{" "}
+                            <Link
+                                href="/politica-de-privacidad"
+                                className="font-medium text-slate-700 hover:text-slate-900 underline underline-offset-2"
+                            >
+                                Politica de Privacidad
                             </Link>
-                        </div>
+                            .
+                        </p>
+
                     </section>
                 </div>
             </div>
