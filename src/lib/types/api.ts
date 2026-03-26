@@ -141,6 +141,18 @@ export interface GeneratedDocResponse {
     text: string;
 }
 
+export interface SetPasswordRequest {
+    access_token: string;
+    refresh_token: string;
+    password: string;
+}
+
+export interface SetPasswordResponse {
+    message: string;
+    access_token: string;
+    token_type: string;
+}
+
 export interface HTTPValidationError {
     detail: ValidationError[];
 }
