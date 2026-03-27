@@ -11,7 +11,6 @@ import {
     AgentDocumentReport,
     DocumentChunk,
     CodeChunk,
-    CodeDocumentResponse,
 } from "@/lib/types/api";
 import {
     Send,
@@ -280,34 +279,12 @@ function ChatPanel({
         ? "Analizando documento…"
         : "Razonando…";
 
-    const {
-        data: codeDocuments,
-        isLoading: isCodeDocumentsLoading,
-        isError: isCodeDocumentsError,
-    } = useQuery({
-        queryKey: ["code-documents"],
-        queryFn: async () => {
-            const endpoints = ["/code-documents"];
-            let lastError: unknown;
-
-            for (const endpoint of endpoints) {
-                try {
-                    const res = await apiClient.get<any[]>(endpoint);
-                    if (Array.isArray(res.data)) {
-                        return res.data.map((item) => ({
-                            doc_id: item.doc_id ?? item.id ?? "",
-                            name: item.name ?? item.filename ?? "Documento legal",
-                        })) as CodeDocumentResponse[];
-                    }
-                } catch (error) {
-                    lastError = error;
-                }
-            }
-
-            throw lastError ?? new Error("No se pudieron cargar los documentos legales.");
-        },
-        enabled: !isDocMode,
-    });
+    const supportedCodeDocuments = [
+        "Constitucion Politica",
+        "Codigo Sustantivo del Trabajo",
+        "Codigo Civil",
+        "Ley 820 del 2003",
+    ];
 
     return (
         <div className={cn(
@@ -376,21 +353,15 @@ function ChatPanel({
                     <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
                         Fuentes legales disponibles
                     </p>
-                    {isCodeDocumentsLoading ? (
-                        <p className="text-xs text-slate-500">Cargando fuentes legales...</p>
-                    ) : isCodeDocumentsError ? (
-                        <p className="text-xs text-red-600">
-                            No se pudieron cargar las fuentes legales disponibles.
-                        </p>
-                    ) : codeDocuments && codeDocuments.length > 0 ? (
+                    {supportedCodeDocuments.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
-                            {codeDocuments.map((doc) => (
+                            {supportedCodeDocuments.map((docName) => (
                                 <div
-                                    key={doc.doc_id || doc.name}
+                                    key={docName}
                                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700"
                                 >
                                     <BookMarked className="h-3 w-3 shrink-0 text-emerald-500" />
-                                    <span className="text-xs font-medium">{doc.name}</span>
+                                    <span className="text-xs font-medium">{docName}</span>
                                 </div>
                             ))}
                         </div>
