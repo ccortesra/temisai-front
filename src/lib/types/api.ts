@@ -153,6 +153,18 @@ export interface SetPasswordResponse {
     token_type: string;
 }
 
+export interface SignUpRequest {
+    email: string;
+    password: string;
+}
+
+export interface SignUpResponse {
+    message: string;
+    user_id: string;
+    access_token?: string | null;
+    token_type?: string | null;
+}
+
 export interface HTTPValidationError {
     detail: ValidationError[];
 }
